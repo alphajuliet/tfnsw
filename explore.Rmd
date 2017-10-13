@@ -5,21 +5,22 @@ output: html_notebook
 
 # Overview
 
-Explore the TfNSW GTFS dataset of public transport routes.
+Basic exploration of the TfNSW route data.
 
-## Setup
+# Setup
 
 ```{r, echo=FALSE, message=FALSE}
 rm(list=ls())
 
 library(tidyverse)
 library(forcats)
+library(stringr)
 
 src_folder <- "data/2017-03-09/"
 theme_set(theme_minimal())
 ```
 
-## Import
+# Import
 
 ```{r}
 read_routes <- function() { read_csv(file.path(src_folder, "routes.csv")) }
@@ -27,7 +28,7 @@ read_agencies <- function () { read_csv(file.path(src_folder, "agency.csv")) }
 read_shapes <- function () { read_csv(file.path(src_folder, "shapes.csv")) }
 ```
 
-## Transform
+# Transform
 
 ```{r}
 transform_routes <- function(df) {
@@ -36,32 +37,35 @@ transform_routes <- function(df) {
       c("route_id", "agency_id", "route_color", "route_text_color"), 
       as_factor)
 }
+
 ```
 
-## Analyse
+# Analyse
 
 Get the total distance for each route from the shapes file.
 ```{r}
 route_distance <- function(df) {
   df %>%
-    group_by(shape_id) %>%
-    summarise(distance = sum(shape_dist_traveled))
+    mutate(route_id = str_replace(shape_id, "\\.\\d\\.[RH]$", "")) %>%
+    group_by(route_id) %>%
+    summarise(distance = sum(shape_dist_traveled)/1000.0)
 }
 ```
 
-## Visualisations
+# Visualisations
 
-Top 10 routes
+Top 10 routes by agency
 ```{r}
 plot_top_10_routes <- function(df) {
   df %>%
     group_by(agency_name, route_desc, route_color) %>%
     summarise(num_routes = n()) %>%
     arrange(desc(num_routes)) %>%
-    head(n = 10) %>%  
+    head(n = 10) %>%
+    
     ggplot(aes(x = reorder(agency_name, num_routes), 
                y = num_routes)) +
-    geom_col(aes(fill = route_desc), position = "stack") +
+    geom_col(aes(fill = route_desc)) +
     coord_flip() +
     geom_text(aes(label = num_routes), hjust = 1.2, size = 3, color="white") +
     theme(
@@ -72,12 +76,37 @@ plot_top_10_routes <- function(df) {
       title = "Top 10 Routes by Agency",
       y = "Number of routes",
       x = "Agency",
-      fill = "Description")
+      fill = "Network")
 }
 ```
 
 
-## Run
+Top 10 routes by distance
+```{r}
+plot_top_10_distances <- function(df) {
+  df %>%
+    arrange(desc(distance)) %>%
+    head(n = 10) %>%
+    
+    ggplot(aes(x = reorder(route_long_name, distance), 
+               y = distance)) +
+    geom_col(aes(fill = route_desc)) +
+    coord_flip() +
+    geom_text(aes(label = round(distance, 0)), hjust = 1.2, size = 3, color="white") +
+    theme(
+      legend.position = "right", 
+      legend.text = element_text(size = 6), 
+      legend.title = element_text(size = 8)) +
+    labs(
+      title = "Top 10 Routes by Distance",
+      y = "Distance",
+      x = "Route",
+      fill = "Network")
+}
+```
+
+
+# Run
 
 Read the data and join
 ```{r, message=FALSE}
@@ -86,19 +115,24 @@ agencies <-
   select(agency_id:agency_name)
 
 shapes <- read_shapes()
-route_distances <- 
+route_distances <-
   shapes %>% 
   route_distance()
 
 routes <- 
   read_routes() %>% 
   transform_routes %>%
-  left_join(agencies)
+  left_join(agencies) %>%
+  left_join(route_distances)
 
 ```
 
 
 ```{r}
-routes %>% plot_top_10_routes()
+routes %>% plot_top_10_routes
+```
+
+```{r}
+routes %>% plot_top_10_distances
 ```
 
