@@ -1,0 +1,74 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Overview
+
+Analyse and visualise the Sydney Trains Network.
+
+# Setup
+
+```{r}
+rm(list=ls())
+
+library(tidyverse)
+library(forcats)
+library(stringr)
+
+src_folder <- "data/2017-03-09/"
+theme_set(theme_minimal())
+```
+
+# Import
+
+```{r}
+read_routes <- function () { read_csv(file.path(src_folder, "routes.csv")) }
+read_stops <- function () { read_csv(file.path(src_folder, "stops.csv")) }
+read_shapes <- function () { read_csv(file.path(src_folder, "shapes.csv")) }
+read_trips <- function () { read_csv(file.path(src_folder, "trips.csv")) }
+```
+
+# Transform
+
+```{r}
+transform_routes <- function(df) {
+  df %>%
+    filter(route_desc == "Sydney Trains Network") %>%
+    select(route_id, route_long_name) %>%
+    mutate(route_id = as_factor(route_id))
+}
+
+transform_stops <- function (df) {
+  df %>%
+    select(-location_type) %>%
+    mutate_at(c("stop_code", "platform_code"), as_factor)
+}
+
+transform_trips <- function (df) {
+  df %>%
+    mutate(direction_id = direction_id %>% as.character %>% as_factor) %>%
+    mutate_at(vars(route_id : shape_id), as_factor)
+}
+```
+
+
+# Run
+
+Read the data and join
+```{r, message=FALSE}
+t_lines <- 
+  read_routes() %>% 
+  transform_routes
+
+stops <- 
+  read_stops() %>% 
+  transform_stops
+
+# Filter trips to train lines only
+trips <-
+  read_trips() %>%
+  transform_trips %>%
+  inner_join(t_lines)
+```
+
