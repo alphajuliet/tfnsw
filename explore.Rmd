@@ -1,0 +1,104 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Overview
+
+Explore the TfNSW GTFS dataset of public transport routes.
+
+## Setup
+
+```{r, echo=FALSE, message=FALSE}
+rm(list=ls())
+
+library(tidyverse)
+library(forcats)
+
+src_folder <- "data/2017-03-09/"
+theme_set(theme_minimal())
+```
+
+## Import
+
+```{r}
+read_routes <- function() { read_csv(file.path(src_folder, "routes.csv")) }
+read_agencies <- function () { read_csv(file.path(src_folder, "agency.csv")) }
+read_shapes <- function () { read_csv(file.path(src_folder, "shapes.csv")) }
+```
+
+## Transform
+
+```{r}
+transform_routes <- function(df) {
+  df %>%
+    mutate_at(
+      c("route_id", "agency_id", "route_color", "route_text_color"), 
+      as_factor)
+}
+```
+
+## Analyse
+
+Get the total distance for each route from the shapes file.
+```{r}
+route_distance <- function(df) {
+  df %>%
+    group_by(shape_id) %>%
+    summarise(distance = sum(shape_dist_traveled))
+}
+```
+
+## Visualisations
+
+Top 10 routes
+```{r}
+plot_top_10_routes <- function(df) {
+  df %>%
+    group_by(agency_name, route_desc, route_color) %>%
+    summarise(num_routes = n()) %>%
+    arrange(desc(num_routes)) %>%
+    head(n = 10) %>%  
+    ggplot(aes(x = reorder(agency_name, num_routes), 
+               y = num_routes)) +
+    geom_col(aes(fill = route_desc), position = "stack") +
+    coord_flip() +
+    geom_text(aes(label = num_routes), hjust = 1.2, size = 3, color="white") +
+    theme(
+      legend.position = "right", 
+      legend.text = element_text(size = 6), 
+      legend.title = element_text(size = 8)) +
+    labs(
+      title = "Top 10 Routes by Agency",
+      y = "Number of routes",
+      x = "Agency",
+      fill = "Description")
+}
+```
+
+
+## Run
+
+Read the data and join
+```{r, message=FALSE}
+agencies <- 
+  read_agencies() %>% 
+  select(agency_id:agency_name)
+
+shapes <- read_shapes()
+route_distances <- 
+  shapes %>% 
+  route_distance()
+
+routes <- 
+  read_routes() %>% 
+  transform_routes %>%
+  left_join(agencies)
+
+```
+
+
+```{r}
+routes %>% plot_top_10_routes()
+```
+
