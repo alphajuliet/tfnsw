@@ -5,7 +5,7 @@ output: html_notebook
 
 # Overview
 
-Analyse and visualise the Sydney Trains Network.
+Analyse and visualise trips on the Sydney Trains Network.
 
 # Setup
 
@@ -43,7 +43,7 @@ transform_routes <- function(df) {
 transform_stops <- function (df) {
   df %>%
     select(-location_type) %>%
-    mutate_at(c("stop_code", "platform_code"), as.factor)
+    mutate_at(c("stop_id"), as.factor)
 }
 
 transform_trips <- function (df) {
@@ -59,6 +59,42 @@ transform_stop_times <- function (df) {
 }
 ```
 
+# Analysis
+
+Group trips into stops, ignoring times
+```{r}
+unique_trips <- function (df) {
+  df %>%
+    group_by(
+      route_long_name, 
+      trip_id) %>%
+    select(
+      route_long_name,
+      trip_id,
+      stop_sequence,
+      stop_name) %>%
+    arrange(
+      trip_id, 
+      stop_sequence)
+}
+```
+
+All trip starts and ends
+```{r}
+trip_endpoints <- function (df) {
+  starts <- 
+    df %>%
+    group_by(route_id, trip_id) %>%
+    filter(stop_sequence == 1) %>%
+    select(route_id, trip_id, start_stop = stop_name)
+  
+  df %>%
+    group_by(route_id, trip_id) %>%
+    filter(stop_sequence == max(stop_sequence)) %>%
+    select(route_id, trip_id, end_stop = stop_name) %>%
+    inner_join(starts)
+}
+```
 
 # Run
 
@@ -86,5 +122,18 @@ stops <-
   transform_stops %>%
   inner_join(stop_times)
 
+# Final data
+glimpse(stops)
+```
+
+Get all the unique trips across the network, regardless of times
+```{r}
+trip_ends <- 
+  stops %>% 
+  trip_endpoints %>%
+  ungroup(trip_id) %>%
+  select(-trip_id) %>%
+  unique() %>%
+  arrange(route_id)
 ```
 
