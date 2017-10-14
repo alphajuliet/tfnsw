@@ -27,6 +27,7 @@ read_routes <- function () { read_csv(file.path(src_folder, "routes.csv")) }
 read_stops <- function () { read_csv(file.path(src_folder, "stops.csv")) }
 read_shapes <- function () { read_csv(file.path(src_folder, "shapes.csv")) }
 read_trips <- function () { read_csv(file.path(src_folder, "trips.csv")) }
+read_stop_times <- function () { read_csv(file.path(src_folder, "stop_times.csv")) }
 ```
 
 # Transform
@@ -42,7 +43,7 @@ transform_routes <- function(df) {
 transform_stops <- function (df) {
   df %>%
     select(-location_type) %>%
-    mutate_at(c("stop_code", "platform_code"), as_factor)
+    mutate_at(c("stop_code", "platform_code"), as.factor)
 }
 
 transform_trips <- function (df) {
@@ -50,25 +51,40 @@ transform_trips <- function (df) {
     mutate(direction_id = direction_id %>% as.character %>% as_factor) %>%
     mutate_at(vars(route_id : shape_id), as_factor)
 }
+
+transform_stop_times <- function (df) {
+  df %>%
+    mutate_at(vars(ends_with("_id")), as.factor) %>%
+    select(-pickup_type, -drop_off_type, -stop_headsign)
+}
 ```
 
 
 # Run
 
-Read the data and join
+Read the data and do repeated joins to create an aggregate data frame.
 ```{r, message=FALSE}
 t_lines <- 
   read_routes() %>% 
   transform_routes
 
-stops <- 
-  read_stops() %>% 
-  transform_stops
-
-# Filter trips to train lines only
+# Match only on route_id
 trips <-
   read_trips() %>%
   transform_trips %>%
   inner_join(t_lines)
+
+# Match only on trip_id
+stop_times <-
+  read_stop_times() %>%
+  transform_stop_times %>%
+  inner_join(trips) 
+
+# Match only on stop_id
+stops <- 
+  read_stops() %>% 
+  transform_stops %>%
+  inner_join(stop_times)
+
 ```
 
