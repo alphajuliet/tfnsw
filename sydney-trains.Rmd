@@ -9,7 +9,7 @@ Analyse and visualise trips on the Sydney Trains Network.
 
 # Setup
 
-```{r}
+```{r, message=FALSE}
 rm(list=ls())
 
 library(tidyverse)
@@ -33,7 +33,7 @@ read_stop_times <- function () { read_csv(file.path(src_folder, "stop_times.csv"
 # Transform
 
 ```{r}
-transform_routes <- function(df) {
+transform_routes <- function (df) {
   df %>%
     filter(route_desc == "Sydney Trains Network") %>%
     select(route_id, route_long_name) %>%
@@ -62,6 +62,7 @@ transform_stop_times <- function (df) {
 # Analysis
 
 Group trips into stops, ignoring times
+
 ```{r}
 unique_trips <- function (df) {
   df %>%
@@ -80,6 +81,7 @@ unique_trips <- function (df) {
 ```
 
 All trip starts and ends
+
 ```{r}
 trip_endpoints <- function (df) {
   starts <- 
@@ -96,9 +98,22 @@ trip_endpoints <- function (df) {
 }
 ```
 
+Create a graph of all stops
+
+```{r}
+# Get all the stops --> graph nodes
+all_stops <- function (df = stops) {
+  df %>%
+    select(stop_name, stop_id, stop_lat, stop_lon) %>%
+    unique
+}
+```
+
+
 # Run
 
-Read the data and do repeated joins to create an aggregate data frame.
+Read the data and do repeated joins to create an aggregate data frame. For the 2017-03-09 data set, this is 482566 rows x 21 columns.
+
 ```{r, message=FALSE}
 t_lines <- 
   read_routes() %>% 
@@ -126,7 +141,9 @@ stops <-
 glimpse(stops)
 ```
 
-Get all the unique trips across the network, regardless of times
+# Visualise
+
+Get all the unique trips across the network as endpoints, regardless of times
 ```{r}
 trip_ends <- 
   stops %>% 
@@ -135,5 +152,40 @@ trip_ends <-
   select(-trip_id) %>%
   unique() %>%
   arrange(route_id)
+```
+
+# Show a graph of the trips between endpoints
+
+```{r}
+library(igraph)
+
+plot_endpoints <- function (df = trip_ends) {
+  all_ends <- c(trip_ends$start_stop, trip_ends$end_stop) %>% unique
+  gr <- 
+    trip_ends %>%
+    select(-route_id) %>%
+    graph_from_data_frame(directed = TRUE, vertices = all_ends)
+
+  deg <- gr %>% degree(mode = "all")
+  layout <- 
+    layout_with_lgl(gr) %>% 
+    norm_coords(ymin=-1, ymax=1, xmin=-1, xmax=1)
+  
+  gr %>% 
+    plot(vertex.size = log(deg) * 2,
+         # vertex.label.cex = 0.3,
+         vertex.color = "#6666ff",
+         vertex.label = NA,
+         edge.color = "#CC6666",
+         edge.arrow.size = 0,
+         rescale = FALSE,
+         layout =  layout * 1.0)
+}
+  
+```
+
+
+```{r}
+trip_ends %>% plot_endpoints
 ```
 
