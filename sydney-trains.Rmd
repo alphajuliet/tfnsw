@@ -83,7 +83,6 @@ transform_stops <- function (df) {
       stop_lat, 
       stop_lon)
 }
-
 ```
 
 
@@ -96,10 +95,17 @@ routes <-
   read_routes() %>% 
   transform_routes
 
-# Match only on route_id
+# Identify just the Sydney Trains routes
+sydney_routes <- 
+  routes %>%
+  pull(route_id) %>%
+  unique()
+
+# Match only on route_id, and filter out non-Sydney Trains routes
 trips <-
   read_trips() %>%
-  transform_trips
+  transform_trips() %>%
+  filter(route_id %in% sydney_routes)
 
 # Match only on stop_id
 stops <- 
@@ -110,8 +116,15 @@ stops <-
 stop_seq <-
   read_stop_times() %>%
   transform_stop_times %>%
-  inner_join(stops, by = "stop_id") %>%
+  left_join(stops, by = "stop_id") %>%
+  right_join(trips, by = "trip_id") %>%
   select(-stop_code, -stop_lat, -stop_lon)
+
+all_stops <- 
+  stop_seq %>%
+  pull(stop_title) %>%
+  sort() %>%
+  unique()
 ```
 
 View the structure of all major data frames.
@@ -128,14 +141,14 @@ glimpse(stop_seq)
 
 Some questions to ask:
 
-* How many different trips per line?
+* How many distinct trips per line?
 * What are all the stops on a given trip? 
 * How many stops on each line?
 * What is the overall distance of each line?
-* What stations are common
+* What stations are common to different routes?
 
 
-## Distinct journeys
+## Distinct trips
 
 Get all the routes and number of trips
 
@@ -148,13 +161,17 @@ trips_per_route <-
 ```
 
 
+Extract colours for each long name.
+
 ```{r}
 route_colours <- 
   routes %>%
   arrange(route_long_name) %>%
-  select(route_color) %>%
-  distinct() %>%
-  pull(route_color)
+  select(route_desc, route_color) %>%
+  distinct()
+
+#%>%
+#  pull(route_color)
 ```
 
 
@@ -177,7 +194,7 @@ trips_per_route %>%
     limits = c(0, 4000), 
     breaks = seq(0, 4000, 500)) +
   scale_fill_manual(
-    values = route_colours) +
+    values = route_colours$route_color) +
   labs(
     title = "Total number of distinct trips on each route", 
     subtitle = "Sydney Trains",
@@ -187,13 +204,13 @@ trips_per_route %>%
 
 ```
 
-## Stops
+## Stops per trip
 
 Return the list of stations for a given trip ID, or a given route ID.
 
 ```{r}
 stops_by_trip_id <- function (id) {
-  stop_times %>%
+  stop_seq %>%
     filter(
       trip_id == id) %>%
     select(
@@ -218,7 +235,7 @@ stops_by_route_id <- function (id) {
 Examples
 
 ```{r warning=FALSE}
-stops_by_trip("1--A.1259.126.128.B.8.59842229")
+stops_by_trip_id("1--A.1259.126.128.B.8.59842229")
 ```
 
 ```{r}
@@ -233,23 +250,142 @@ routes %>%
   select(
     route_id, 
     route_long_name) %>%
-  inner_join(trips) %>%
+  inner_join(trips, by = "route_id") %>%
   group_by(route_id) %>%
   mutate(
     number_of_stops = stops_by_route_id(route_id) %>% length()) %>%
   select(
+    route_id,
     route_long_name,
     number_of_stops) %>%
   distinct() %>%
-  arrange(desc(number_of_stops))
+  arrange(desc(number_of_stops)) %>%
+  head(10)
 ```
 
-Develop a data frame around stops
+## Stop locations
+
+Show the location of all stops
 
 ```{r}
-
+stop_seq %>%
+  select(stop_id) %>%
+  distinct() %>%
+  left_join(
+    stops, by = "stop_id") %>%
+  select(
+    stop_title, stop_lon, stop_lat) %>%
+  ggplot(
+    aes(x = stop_lon, y = stop_lat)) +
+  geom_point(
+    colour =  "#3333ff",
+    size = 0.5) +
+  labs(
+    title = "All stop locations",
+    x = "Longitude", y = "Latitude")
 ```
 
+
+## Graph of stops and edges
+
+```{r}
+#TODO
+```
+
+
+## Stops vs routes
+
+### What routes does each stop serve? 
+
+```{r}
+stop_routes <-
+  stop_seq %>%
+  select(stop_title, trip_id) %>%
+  left_join(trips, by = "trip_id") %>%
+  left_join(routes, by = "route_id") %>%
+  select(stop_title, route_desc, route_color) %>%
+  distinct() %>%
+  arrange(stop_title)
+```
+
+```{r}
+glimpse(stop_routes)
+```
+
+
+### Top number of routes per stop
+
+```{r}
+stop_routes %>%
+  group_by(stop_title) %>%
+  summarise(routes = n()) %>%
+  ggplot(aes(routes)) +
+  stat_count(fill = "#33cc99", width = 0.7)
+
+#  arrange(desc(routes)) %>%
+#  head(8)
+```
+
+
+
+### Stops per route
+
+```{r}
+stops_per_route <-
+  stop_routes %>%
+  group_by(route_desc, route_color) %>%
+  summarise(stops = n()) %>%
+  arrange(desc(stops))
+
+stops_per_route
+```
+
+```{r}
+```
+
+
+```{r}
+stops_per_route %>%
+  ggplot(aes(reorder(route_desc, stops), stops)) +
+  geom_col(
+    aes(fill = route_desc), 
+    width = 0.6) +
+  geom_text(
+    aes(label = stops), 
+    size = 3, 
+    hjust = -0.5) +
+  scale_fill_manual(
+    values = deframe(route_colours)) +
+  coord_flip() +
+  theme(legend.position = "none")
+```
+
+
+```{r}
+stop_colours <-  
+  stop_routes %>%
+  select(-route_desc) %>%
+  group_by(stop_title) %>%
+  summarise(
+    #colours = as.list(route_color) %>% as_vector("character")
+    colours = str_c(route_color, collapse = ",") %>% str_split(","))
+    #colours = str_c(route_color, collapse = "|"))
+
+stop_colours %>% head(10)
+```
+
+### Export
+
+```{r}
+stop_routes %>%
+  write_csv("data/stop_routes.csv")
+```
+
+```{r}
+library(jsonlite)
+stop_colours %>%
+  write_json("data/stop_colours.json")
+```
 
 ## Endpoints
 
@@ -316,15 +452,6 @@ plot_endpoints <- function (df = trip_ends) {
 ```
 
 
-Create a graph of all stops
-
-```{r}
-# Get all the stops --> graph nodes
-stops %>%
-  select(stop_title, stop_lat, stop_lon) %>%
-  ggplot(aes(x = stop_lon, y = stop_lat)) +
-  geom_point()
-```
 
 
 
