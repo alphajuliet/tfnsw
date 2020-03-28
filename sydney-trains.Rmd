@@ -204,7 +204,7 @@ trips_per_route %>%
 
 ```
 
-## Stops per trip
+## Stops per route
 
 Return the list of stations for a given trip ID, or a given route ID.
 
